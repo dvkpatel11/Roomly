@@ -1,0 +1,174 @@
+# Comprehensive Routes Module Requirements
+
+Here's a comprehensive reference for what each routes module should implement to support your roommates application:
+
+## 1. auth_routes.py
+
+- **User Registration**: Email/password validation, bcrypt hashing, JWT token issuance
+- **User Login**: Authentication, JWT token generation with appropriate expiry
+- **Token Refresh**: Mechanism to refresh JWT tokens before expiry
+- **Password Reset**: Email flow for forgotten passwords
+- **Profile Management**: Update user preferences, password changes
+- **Account Verification**: Email verification if required
+- **Session Management**: Logout/token invalidation
+
+## 2. household_routes.py
+
+- **Household Creation**: Create with creator as admin
+- **Household Joining**: Join via invite code/link
+- **Member Management**: Add/remove members
+- **Role Assignment**: Promote/demote between admin and member roles
+- **Household Settings**: Update household settings
+- **Member Listing**: Get all members with roles
+- **Household Deletion**: Admin-only with cascading deletion of related data
+- **Invitation Generation**: Create and manage invitation links/codes
+
+## 3. task_routes.py
+
+- **Task Creation**: Create with title, frequency, assignee
+- **Round-Robin Assignment**: Algorithm for fair task distribution
+- **Task Reassignment**: Allow manual reassignment
+- **Task Swapping**: Logic for members to swap tasks
+- **Task Completion**: Mark tasks complete with timestamp
+- **Task History**: Track completion history for analytics
+- **Recurring Task Generation**: Create future instances of recurring tasks
+- **Streak Calculation**: Track consecutive completions
+- **Task Filtering**: Get tasks by status, assignee, due date
+- **Task Reminders**: Generate notifications for upcoming/overdue tasks
+
+## 4. notification_routes.py
+
+- **Notification Creation**: Internal API for other routes to create notifications
+- **Notification Retrieval**: Get user's notifications with filtering
+- **Mark as Read**: Mark individual or all notifications as read
+- **Notification Preferences**: Update user notification settings
+- **Push Notification Integration**: Connect with frontend notification system
+- **Email Notification Dispatch**: Send email for critical notifications
+- **Bulk Operations**: Handle multiple notifications at once
+- **Notification Expiry**: Auto-remove old notifications
+
+## 5. chat_routes.py
+
+- **Message Posting**: Add messages to household chat
+- **Message Retrieval**: Get chat history with pagination
+- **Real-time Updates**: WebSocket integration for live chat
+- **Announcements**: Special highlighted messages
+- **Message Deletion**: Allow deleting own messages
+- **Chat History**: Pagination and filtering of older messages
+- **Read Receipts**: Track which users have seen messages
+- **Typing Indicators**: Real-time typing status (optional)
+
+## 6. calendar_routes.py
+
+- **Event Creation**: Create with title, time, details
+- **Recurring Events**: Support for repeated events using iCal RRULE
+- **Event Retrieval**: Get events for timespan with filtering
+- **Privacy Settings**: Control visibility of personal vs household events
+- **Event Updates**: Modify existing events
+- **Event Reminders**: Generate notifications for upcoming events
+- **Calendar Sharing**: Export/import functionality
+- **RSVP System**: Allow members to confirm attendance
+
+## 7. file_routes.py
+
+- **File Upload**: Secure upload with proper validation
+- **File Encryption**: Encrypt sensitive files
+- **File Storage**: Connect to S3 or other storage solutions
+- **File Retrieval**: Download with optional decryption
+- **File Listing**: Get all files with filtering
+- **Access Control**: Ensure household-specific permissions
+- **File Deletion**: Remove with storage cleanup
+- **File Metadata**: Track upload time, owner, etc.
+
+## 8. poll_routes.py
+
+- **Poll Creation**: Create with question and options
+- **Vote Casting**: Allow members to vote
+- **Poll Results**: Calculate and return results
+- **Real-time Updates**: WebSocket for live voting results
+- **Poll Expiry**: Handle closing polls at deadline
+- **Poll Listing**: Get active and past polls
+- **Vote Changing**: Allow/prevent changing votes
+- **Poll Notifications**: Alert household of new polls and results
+
+## 9. badge_routes.py
+
+- **Badge Definition**: Create badge types and criteria
+- **Badge Awarding**: Logic to award badges based on achievements
+- **Badge Listing**: Get user's earned badges
+- **Achievement Tracking**: Monitor progress toward badges
+- **Streak Badges**: Award based on task completion streaks
+- **Contribution Badges**: Award based on household participation
+- **Badge Notifications**: Alert users of new badges
+- **Badge Display**: Format badge data for UI presentation
+
+## 10. analytics_routes.py
+
+- **Task Completion Stats**: Calculate individual and household rates
+- **Contribution Tracking**: Quantify member participation
+- **Leaderboards**: Generate rankings for gamification
+- **Streak Analysis**: Track longest and current streaks
+- **Activity Heatmaps**: Show activity patterns over time
+- **Household Insights**: Generate household performance metrics
+- **User Analytics**: Personal performance history
+- **Trend Identification**: Show improvement or decline over time
+
+## Cross-Cutting Concerns for All Routes
+
+1. **Authentication**: JWT validation on protected endpoints
+2. **Authorization**: Check household membership and role permissions
+3. **Error Handling**: Consistent error responses with appropriate status codes
+4. **Validation**: Input validation for all requests
+5. **Pagination**: For listing endpoints that return multiple items
+6. **Logging**: Activity logging for security and debugging
+7. **Rate Limiting**: Prevent abuse of endpoints
+8. **Transaction Management**: Ensure database consistency
+
+This comprehensive reference covers all the functionality needed to implement your roommates application features. Each routes modulez should address its specific domain while considering these cross-cutting concerns to ensure a robust, secure, and user-friendly application.
+
+Base impls:
+
+For an MVP layout, we'll focus on implementing these key files in the following order:
+
+## Phase 1: Core Structure & Authentication
+
+1. `src/services/api.js` - Base API setup with JWT handling
+2. `src/contexts/AuthContext.jsx` - Authentication state management
+3. `src/hooks/useAuth.js` - Hook for accessing auth functionality
+4. `src/features/auth/Login.jsx` - Login component
+5. `src/features/auth/Register.jsx` - Registration component
+6. `src/routes/PrivateRoute.jsx` & `PublicRoute.jsx` - Route protection
+
+## Phase 2: Layout Framework
+
+7. `src/components/layout/AppLayout.jsx` - Responsive container for all authenticated pages
+8. `src/components/layout/Header.jsx` - Top navigation bar
+9. `src/components/layout/Sidebar.jsx` - Desktop navigation sidebar
+10. `src/components/common/Button.jsx` - Reusable button component
+11. `src/components/common/Input.jsx` - Form input component
+12. `src/components/common/Card.jsx` - Container component
+
+## Phase 3: Household Functionality
+
+13. `src/contexts/HouseholdContext.jsx` - Household state management
+14. `src/hooks/useHousehold.js` - Household functionality hook
+15. `src/components/layout/HouseholdSelector.jsx` - Dropdown for household selection
+16. `src/features/households/HouseholdList.jsx` - List of user's households
+17. `src/features/households/HouseholdForm.jsx` - Create new household form
+
+## Phase 4: Task Management (Core Feature)
+
+18. `src/services/taskService.js` - Task API methods
+19. `src/hooks/useTasks.js` - Task functionality hook
+20. `src/features/tasks/TaskList.jsx` - Display list of tasks
+21. `src/features/tasks/TaskForm.jsx` - Create/edit task form
+22. `src/features/tasks/TaskDashboard.jsx` - Container for task components
+
+This implementation order allows you to:
+
+1. Start with authentication to establish user identity
+2. Build the responsive layout framework
+3. Add household management as the organizational structure
+4. Implement tasks as the first core feature
+
+Would you like me to start implementing any specific component from this list?

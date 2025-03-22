@@ -1,0 +1,23 @@
+# .env
+.env.local
+.env.development
+venv/
+.venv/
+.env/
+myenv/
+.myenv/
+__pycache__/
+migrations/
+todo
+docs/
+generated_reports/
+logs/
+.aider*
+.backlog
+development.env
+cache/
+exports/
+node_modules/
+venv/
+env/
+.env
