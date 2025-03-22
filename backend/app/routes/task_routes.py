@@ -82,8 +82,9 @@ def create_task(household_id):
 @task_bp.route("/households/<household_id>/tasks", methods=["GET"])
 @jwt_required()
 def get_household_tasks(household_id):
-    current_user = User.query.filter_by(email=get_jwt_identity()).first()
-
+    current_user = User.query.get(get_jwt_identity())
+    print(f"Fetching task for household {household_id} with user {current_user}")
+    print(f"Current userId: {get_jwt_identity()}")
     if not check_household_permission(current_user, household_id, "member"):
         return jsonify({"error": "Not a household member"}), 403
 
@@ -140,7 +141,7 @@ def get_household_tasks(household_id):
 @task_bp.route("/tasks/<task_id>/complete", methods=["PATCH"])
 @jwt_required()
 def complete_task(task_id):
-    current_user = User.query.filter_by(email=get_jwt_identity()).first()
+    current_user = User.query.get(get_jwt_identity())
     task = Task.query.get_or_404(task_id)
 
     if task.completed:
@@ -179,7 +180,7 @@ def complete_task(task_id):
 @task_bp.route("/tasks/<task_id>/swap", methods=["POST"])
 @jwt_required()
 def request_swap(task_id):
-    current_user = User.query.filter_by(email=get_jwt_identity()).first()
+    current_user = User.query.get(get_jwt_identity())
     task = Task.query.get_or_404(task_id)
     data = request.get_json()
 
@@ -218,7 +219,7 @@ def request_swap(task_id):
 @task_bp.route("/users/<user_id>/tasks", methods=["GET"])
 @jwt_required()
 def get_user_tasks(user_id):
-    current_user = User.query.filter_by(email=get_jwt_identity()).first()
+    current_user = User.query.get(get_jwt_identity())
 
     if current_user.id != user_id and not check_household_permission(
         current_user, None, "admin"
@@ -232,7 +233,7 @@ def get_user_tasks(user_id):
 @task_bp.route("/tasks/<task_id>", methods=["DELETE"])
 @jwt_required()
 def delete_task(task_id):
-    current_user = User.query.filter_by(email=get_jwt_identity()).first()
+    current_user = User.query.get(get_jwt_identity())
     task = Task.query.get_or_404(task_id)
 
     # Authorization: Task creator or household admin

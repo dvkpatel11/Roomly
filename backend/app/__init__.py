@@ -18,6 +18,9 @@ def create_app():
                 "allow_headers": app.config["CORS_ALLOW_HEADERS"],
                 "expose_headers": app.config["CORS_EXPOSE_HEADERS"],
                 "supports_credentials": app.config["CORS_SUPPORTS_CREDENTIALS"],
+                "max_age": app.config["CORS_MAX_AGE"],
+                "send_wildcard": False,
+                "vary_header": True,
             }
         },
     )

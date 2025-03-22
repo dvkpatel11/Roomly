@@ -12,7 +12,7 @@ analytics_bp = Blueprint("analytics", __name__)
 @analytics_bp.route("/households/<household_id>/analytics", methods=["GET"])
 @jwt_required()
 def get_analytics(household_id):
-    user = User.query.filter_by(email=get_jwt_identity()).first()
+    user = User.query.get(get_jwt_identity())
     household = Household.query.get(household_id)
 
     if not household or user not in household.members:
@@ -133,7 +133,7 @@ def get_analytics(household_id):
 @analytics_bp.route("/users/<user_id>/badges", methods=["GET"])
 @jwt_required()
 def get_user_badges(user_id):
-    user = User.query.filter_by(email=get_jwt_identity()).first()
+    user = User.query.get(get_jwt_identity())
     target_user = User.query.get_or_404(user_id)
 
     if user.id != target_user.id and not check_household_permission(

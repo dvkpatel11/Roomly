@@ -26,7 +26,29 @@ class Config:
         "CORS_ORIGINS",
         "http://localhost:8080,http://127.0.0.1:8080,http://localhost:3000,http://127.0.0.1:3000",
     ).split(",")
-    CORS_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-    CORS_ALLOW_HEADERS = ["Content-Type", "Authorization"]
-    CORS_EXPOSE_HEADERS = ["Content-Range", "X-Total-Count"]
+    CORS_METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+    CORS_ALLOW_HEADERS = [
+        # Standard headers
+        "Content-Type",
+        "Authorization",
+        "Accept",
+        "Origin",
+        # Custom headers
+        "X-Household-ID",
+        "X-Requested-With",
+        # Cache control
+        "Cache-Control",
+        "If-Match",
+        "If-None-Match",
+        # Content negotiation
+        "Accept-Language",
+        "Accept-Encoding",
+    ]
+    CORS_EXPOSE_HEADERS = [
+        "Content-Range",
+        "X-Total-Count",
+        "ETag",
+        "Cache-Control",
+    ]
     CORS_SUPPORTS_CREDENTIALS = True
+    CORS_MAX_AGE = 600  # Maximum time to cache preflight requests (10 minutes)
