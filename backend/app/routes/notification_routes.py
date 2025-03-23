@@ -92,6 +92,7 @@ def mark_all_notifications_read():
 
     notification_count = query.update({Notification.is_read: True})
     db.session.commit()
+    socketio.emit("notification_count", {"count": notification_count})
 
     return jsonify({"success": True, "count": notification_count})
 
@@ -187,7 +188,6 @@ def update_notification_settings():
 def delete_notification(notification_id):
     """Delete a notification"""
     current_user_id = get_jwt_identity()
-
     notification = Notification.query.filter_by(
         id=notification_id, user_id=current_user_id
     ).first_or_404()

@@ -83,8 +83,6 @@ def create_task(household_id):
 @jwt_required()
 def get_household_tasks(household_id):
     current_user = User.query.get(get_jwt_identity())
-    print(f"Fetching task for household {household_id} with user {current_user}")
-    print(f"Current userId: {get_jwt_identity()}")
     if not check_household_permission(current_user, household_id, "member"):
         return jsonify({"error": "Not a household member"}), 403
 

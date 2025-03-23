@@ -293,7 +293,6 @@ def notify_offline_users(
         db.session.commit()
     except Exception as e:
         db.session.rollback()
-        print(f"Error creating notifications: {str(e)}")
 
 
 # REST Endpoints
