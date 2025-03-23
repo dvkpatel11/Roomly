@@ -183,7 +183,14 @@ def create_household():
 @auth_bp.route("/auth/refresh", methods=["POST"])
 @jwt_required(refresh=True)
 def refresh():
-    current_user_id = get_jwt_identity()
-    current_user = User.query.get(current_user_id)
-    new_access_token = create_access_token(identity=current_user)
+    current_user = get_jwt_identity()  # Get the current user identity
+    # Assuming you have a function to get the user object by ID
+    user = User.query.get(current_user)  # Fetch the user object from the database
+
+    if user is None:
+        return jsonify({"msg": "User not found"}), 404
+
+    # Create a new access token with the user's ID
+    new_access_token = create_access_token(identity=user.id)  # Use user.id or any other serializable field
+
     return jsonify(access_token=new_access_token), 200

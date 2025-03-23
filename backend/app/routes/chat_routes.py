@@ -4,6 +4,8 @@ from flask_socketio import emit, join_room, leave_room
 from datetime import datetime
 from ..models.models import Message, Poll, Vote, User, Household, user_households
 from ..extensions import db, socketio
+from ..utils.auth_utils import check_household_permission
+from flask_jwt_extended import decode_token
 
 chat_bp = Blueprint("chat", __name__)
 
@@ -54,14 +56,10 @@ def handle_disconnect():
             break
 
 
-@socketio.on("send_message")
-def handle_send_message(data):
+@socketio.on("message")
+def handle_message(data):
     try:
         token = data.get("token")
-        if not token:
-            emit("error", {"message": "Token required"})
-            return
-
         user_id = verify_jwt_token(token)
         user = User.query.get(user_id)
 
@@ -89,9 +87,9 @@ def handle_send_message(data):
 
         new_message = Message(
             content=data["content"],
-            is_announcement=data.get("is_announcement", False),
             household_id=household_id,
             user_id=user_id,
+            is_announcement=data.get("is_announcement", False),
         )
         db.session.add(new_message)
         db.session.commit()
@@ -239,9 +237,8 @@ def leave_household(data):
 def verify_jwt_token(token):
     """Verify JWT token and return user_id"""
     try:
-        from flask_jwt_extended import decode_token
-
-        decoded = decode_token(token)
+        print(f"Verifying token: {token}")  # Log the token
+        decoded = decode_token(token.encode('utf-8'))  # Convert to bytes
         return decoded["sub"]  # This should be the user_id
     except Exception as e:
         raise Exception(f"Invalid token: {str(e)}")
@@ -336,6 +333,38 @@ def get_messages(household_id):
     )
 
 
+@chat_bp.route("/households/<household_id>/messages", methods=["POST"])
+@jwt_required()
+def send_message(household_id):
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+
+    # Check if the user is a member of the household
+    household = Household.query.get(household_id)
+    if not household or user not in household.members:
+        return jsonify({"error": "Not a household member"}), 403
+
+    data = request.get_json()
+    if not data or "message" not in data:
+        return jsonify({"error": "Message content is required"}), 400
+
+    try:
+        new_message = Message(
+            content=data["message"],
+            household_id=household_id,
+            user_id=current_user_id,
+            is_announcement=data.get("isAnnouncement", False),
+        )
+        db.session.add(new_message)
+        db.session.commit()
+
+        return jsonify({"message": "Message sent successfully", "message_id": new_message.id}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
 @chat_bp.route("/households/<household_id>/polls", methods=["POST"])
 @jwt_required()
 def create_poll(household_id):
@@ -354,13 +383,12 @@ def create_poll(household_id):
         },  # Initialize vote counts to 0
         expires_at=datetime.fromisoformat(data["expires_at"]),
         household_id=household.id,
-        created_by=user.id,
     )
     db.session.add(new_poll)
     db.session.commit()
 
     # Broadcast new poll to all household members
-    emit(
+    socketio.emit(
         "new_poll",
         {
             "id": new_poll.id,
@@ -370,7 +398,6 @@ def create_poll(household_id):
             "created_by": user.email,
         },
         room=f"household_{household_id}",
-        broadcast=True,
     )
 
     return jsonify({"message": "Poll created", "poll_id": new_poll.id}), 201
@@ -626,3 +653,14 @@ def handle_typing_stop(data):
 
     except Exception as e:
         emit("error", {"message": str(e)})
+
+
+def check_household_permission(user, household_id, role):
+    """Check if the user has a specific role in the household."""
+    # Assuming you have a UserHousehold model that links users to households with roles
+    membership = (
+        db.session.query(user_households)
+        .filter_by(user_id=user.id, household_id=household_id)
+        .first()
+    )
+    return membership.role == role if membership else False
