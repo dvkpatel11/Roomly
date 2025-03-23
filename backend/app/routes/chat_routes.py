@@ -4,6 +4,8 @@ from flask_socketio import emit, join_room, leave_room
 from datetime import datetime
 from ..models.models import Message, Poll, Vote, User, Household, user_households
 from ..extensions import db, socketio
+from ..utils.auth_utils import check_household_permission
+from flask_jwt_extended import decode_token
 
 chat_bp = Blueprint("chat", __name__)
 
@@ -54,14 +56,10 @@ def handle_disconnect():
             break
 
 
-@socketio.on("send_message")
-def handle_send_message(data):
+@socketio.on("message")
+def handle_message(data):
     try:
         token = data.get("token")
-        if not token:
-            emit("error", {"message": "Token required"})
-            return
-
         user_id = verify_jwt_token(token)
         user = User.query.get(user_id)
 
@@ -89,12 +87,15 @@ def handle_send_message(data):
 
         new_message = Message(
             content=data["content"],
-            is_announcement=data.get("is_announcement", False),
             household_id=household_id,
             user_id=user_id,
+            is_announcement=data.get("is_announcement", False),
         )
         db.session.add(new_message)
         db.session.commit()
+
+        # Log the message creation for debugging
+        print(f"New message created: ID={new_message.id}, Content={new_message.content[:30]}..., Sender={user.email}")
 
         # Broadcast to all in the room
         room = f"household_{household_id}"
@@ -111,6 +112,14 @@ def handle_send_message(data):
             room=room,
         )
 
+        # Return success to the sender with the message ID
+        return {
+            "status": "success",
+            "message_id": new_message.id,
+            "sender_id": user_id,
+            "sender_email": user.email,
+        }
+
         # Create notifications for offline users
         notify_offline_users(
             household_id,
@@ -121,7 +130,9 @@ def handle_send_message(data):
         )
 
     except Exception as e:
+        print(f"Error in handle_message: {str(e)}")
         emit("error", {"message": str(e)})
+        return {"status": "error", "message": str(e)}
 
 
 @socketio.on("authenticate")
@@ -203,9 +214,56 @@ def join_household(data):
             include_self=False,
         )
 
+        # Send recent messages (last 100)
+        recent_messages = (
+            Message.query.filter_by(household_id=household_id)
+            .order_by(Message.created_at.desc())
+            .limit(100)
+            .all()
+        )
+        
+        message_list = [
+            {
+                "id": m.id,
+                "content": m.content,
+                "sender_id": m.user_id,
+                "sender_email": m.sender.email,
+                "is_announcement": m.is_announcement,
+                "created_at": m.created_at.isoformat(),
+                "edited_at": m.edited_at.isoformat() if m.edited_at else None
+            }
+            for m in recent_messages
+        ]
+        
+        # Send recent active polls
+        active_polls = (
+            Poll.query.filter_by(household_id=household_id)
+            .filter(Poll.expires_at > datetime.utcnow())
+            .all()
+        )
+        
+        poll_list = []
+        for poll in active_polls:
+            creator = User.query.get(poll.created_by) if hasattr(poll, 'created_by') else None
+            creator_email = creator.email if creator else "Unknown"
+            
+            poll_list.append({
+                "id": poll.id,
+                "question": poll.question,
+                "options": poll.options,
+                "expires_at": poll.expires_at.isoformat(),
+                "created_by": creator_email,
+                "created_at": poll.created_at.isoformat() if hasattr(poll, 'created_at') else None
+            })
+
         emit(
             "joined_household",
-            {"household_id": household_id, "message": f"Joined household chat"},
+            {
+                "household_id": household_id,
+                "message": f"Joined household chat",
+                "recent_messages": message_list,
+                "active_polls": poll_list
+            },
         )
 
     except Exception as e:
@@ -239,9 +297,8 @@ def leave_household(data):
 def verify_jwt_token(token):
     """Verify JWT token and return user_id"""
     try:
-        from flask_jwt_extended import decode_token
-
-        decoded = decode_token(token)
+        print(f"Verifying token: {token}")  # Log the token
+        decoded = decode_token(token.encode('utf-8'))  # Convert to bytes
         return decoded["sub"]  # This should be the user_id
     except Exception as e:
         raise Exception(f"Invalid token: {str(e)}")
@@ -306,34 +363,74 @@ def get_messages(household_id):
     if not household or user not in household.members:
         return jsonify({"error": "Not a household member"}), 403
 
-    page = request.args.get("page", 1, type=int)
-    per_page = request.args.get("per_page", 50, type=int)
-    messages = (
-        Message.query.filter_by(household_id=household_id)
-        .order_by(Message.created_at.desc())
-        .paginate(page=page, per_page=per_page)
-    )
+    # Support cursor-based pagination for efficiency
+    before_id = request.args.get("before_id", type=int)
+    after_id = request.args.get("after_id", type=int)
+    limit = request.args.get("limit", 500, type=int)  # Default to 500 messages
+    
+    # Build query
+    query = Message.query.filter_by(household_id=household_id)
+    
+    # Apply cursor-based pagination if specified
+    if before_id:
+        message = Message.query.get(before_id)
+        if message:
+            query = query.filter(Message.created_at < message.created_at)
+    elif after_id:
+        message = Message.query.get(after_id)
+        if message:
+            query = query.filter(Message.created_at > message.created_at)
+    
+    # Get the messages, ordered by creation time
+    messages = query.order_by(Message.created_at.desc()).limit(limit).all()
+    
+    # Convert to JSON-serializable format
+    message_list = [
+        {
+            "id": m.id,
+            "content": m.content,
+            "sender_id": m.user_id,
+            "sender_email": m.sender.email,
+            "is_announcement": m.is_announcement,
+            "created_at": m.created_at.isoformat(),
+            "edited_at": m.edited_at.isoformat() if m.edited_at else None
+        }
+        for m in messages
+    ]
 
-    return (
-        jsonify(
-            {
-                "messages": [
-                    {
-                        "id": m.id,
-                        "content": m.content,
-                        "sender": m.sender.email,
-                        "is_announcement": m.is_announcement,
-                        "created_at": m.created_at.isoformat(),
-                    }
-                    for m in messages.items
-                ],
-                "total": messages.total,
-                "page": messages.page,
-                "per_page": messages.per_page,
-            }
-        ),
-        200,
-    )
+    return jsonify({"messages": message_list}), 200
+
+
+@chat_bp.route("/households/<household_id>/messages", methods=["POST"])
+@jwt_required()
+def send_message(household_id):
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+
+    # Check if the user is a member of the household
+    household = Household.query.get(household_id)
+    if not household or user not in household.members:
+        return jsonify({"error": "Not a household member"}), 403
+
+    data = request.get_json()
+    if not data or "message" not in data:
+        return jsonify({"error": "Message content is required"}), 400
+
+    try:
+        new_message = Message(
+            content=data["message"],
+            household_id=household_id,
+            user_id=current_user_id,
+            is_announcement=data.get("isAnnouncement", False),
+        )
+        db.session.add(new_message)
+        db.session.commit()
+
+        return jsonify({"message": "Message sent successfully", "message_id": new_message.id}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
 
 
 @chat_bp.route("/households/<household_id>/polls", methods=["POST"])
@@ -354,13 +451,12 @@ def create_poll(household_id):
         },  # Initialize vote counts to 0
         expires_at=datetime.fromisoformat(data["expires_at"]),
         household_id=household.id,
-        created_by=user.id,
     )
     db.session.add(new_poll)
     db.session.commit()
 
     # Broadcast new poll to all household members
-    emit(
+    socketio.emit(
         "new_poll",
         {
             "id": new_poll.id,
@@ -370,7 +466,6 @@ def create_poll(household_id):
             "created_by": user.email,
         },
         room=f"household_{household_id}",
-        broadcast=True,
     )
 
     return jsonify({"message": "Poll created", "poll_id": new_poll.id}), 201
@@ -408,12 +503,11 @@ def vote_poll(poll_id):
     poll.options[selected_option] += 1
     db.session.commit()
 
-    # Broadcast updated poll results
-    emit(
-        "poll_update",
+    # Broadcast updated poll results using socketio.emit instead of emit
+    socketio.emit(
+        "poll_updated",
         {"poll_id": poll.id, "options": poll.options},
         room=f"household_{poll.household_id}",
-        broadcast=True,
     )
 
     return jsonify({"message": "Vote recorded"}), 200
@@ -626,3 +720,68 @@ def handle_typing_stop(data):
 
     except Exception as e:
         emit("error", {"message": str(e)})
+
+
+def check_household_permission(user, household_id, role):
+    """Check if the user has a specific role in the household."""
+    # Assuming you have a UserHousehold model that links users to households with roles
+    membership = (
+        db.session.query(user_households)
+        .filter_by(user_id=user.id, household_id=household_id)
+        .first()
+    )
+    return membership.role == role if membership else False
+
+
+@chat_bp.route("/households/<household_id>/polls", methods=["GET"])
+@jwt_required()
+def get_polls(household_id):
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+    household = Household.query.get(household_id)
+
+    if not household or user not in household.members:
+        return jsonify({"error": "Not a household member"}), 403
+
+    # Support cursor-based pagination for efficiency
+    before_id = request.args.get("before_id", type=int)
+    after_id = request.args.get("after_id", type=int)
+    limit = request.args.get("limit", 50, type=int)  # Default to 50 polls (usually fewer than messages)
+    include_expired = request.args.get("include_expired", "false").lower() == "true"
+    
+    # Build query
+    query = Poll.query.filter_by(household_id=household_id)
+    
+    # Only include active polls by default
+    if not include_expired:
+        query = query.filter(Poll.expires_at > datetime.utcnow())
+    
+    # Apply cursor-based pagination if specified
+    if before_id:
+        poll = Poll.query.get(before_id)
+        if poll:
+            query = query.filter(Poll.created_at < poll.created_at)
+    elif after_id:
+        poll = Poll.query.get(after_id)
+        if poll:
+            query = query.filter(Poll.created_at > poll.created_at)
+    
+    # Get the polls, ordered by creation time
+    polls = query.order_by(Poll.created_at.desc()).limit(limit).all()
+    
+    # Get the creator's email for each poll
+    poll_list = []
+    for poll in polls:
+        creator = User.query.get(poll.created_by) if hasattr(poll, 'created_by') else None
+        creator_email = creator.email if creator else "Unknown"
+        
+        poll_list.append({
+            "id": poll.id,
+            "question": poll.question,
+            "options": poll.options,
+            "expires_at": poll.expires_at.isoformat(),
+            "created_by": creator_email,
+            "created_at": poll.created_at.isoformat() if hasattr(poll, 'created_at') else None
+        })
+
+    return jsonify({"polls": poll_list}), 200

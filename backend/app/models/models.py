@@ -126,6 +126,7 @@ class Message(db.Model):
     content = db.Column(db.Text, nullable=False)
     is_announcement = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    edited_at = db.Column(db.DateTime, nullable=True)
 
     # Foreign Keys
     household_id = db.Column(
